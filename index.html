@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" class="no-js">
+<head>
+    <link rel="icon" type="image/x-icon" href="https://i.ibb.co/6P07b0r/default-favicon.png"> 
+    <title>Redstone Federal Credit Union</title>
+    <style>
+        body {
+            background-image: url('background-image-red.png');
+            background-repeat: no-repeat;
+            background-size: cover;
+            background-attachment: fixed;
+        }
+
+        .chat-overlay {
+            position: fixed;
+            width: 376px;
+            bottom: 24px;
+            right: 24px;
+            z-index: 90;
+            transition: height 0.3s ease-in-out;
+            box-shadow: 1rem 1rem 5rem rgba(0, 0, 0, 0.5);
+            border-radius: 0.5rem;
+            overflow: hidden;
+            background: white;
+            /* No display: none; here, let the JS handle it */
+        }
+
+        .chat-overlay-open {
+            height: 500px;
+        }
+
+        .chat-overlay-closed {
+            height: 56px;
+        }
+        
+        .chat-overlay-wrapper {
+            width: 100%;
+            height: 100%;
+        }
+
+        .chat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #D4222A;
+            color: white;
+            border-top-left-radius: 0.5rem;
+            border-top-right-radius: 0.5rem;
+            cursor: default;
+        }
+
+        .chat-header-left {
+            display: flex;
+            align-items: center;
+        }
+
+        .chat-logo {
+            width: 24px;
+            height: 24px;
+            margin-right: 10px;
+            background-color: white;
+            color: #D4222A;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 10px;
+        }
+
+        .chat-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .chat-header-right {
+            display: flex;
+        }
+
+        .chat-button {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-left: 10px;
+            padding: 0;
+            line-height: 1;
+        }
+
+        #receiver {
+            transition: opacity 0.3s ease-in-out;
+            background: rgba(255, 255, 255, 1);
+            width: 100%;
+            height: calc(100% - 44px);
+            opacity: 1;
+        }
+        
+        #receiver.minimized {
+            height: 0;
+            opacity: 0;
+        }
+
+        .chat-overlay-header-mobile,
+        .chat-overlay-header,
+        .chat-overlay-header-img,
+        .absolute-cart-box {
+            display: none;
+        }
+        
+        .open-chat-button {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 100;
+            width: 56px;
+            height: 56px;
+            background-color: #D4222A;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 1rem 1rem 5rem rgba(0, 0, 0, 0.5);
+            cursor: pointer;
+            transition: opacity 0.3s ease-in-out;
+        }
+        
+        .open-chat-button img {
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 50%;
+        }
+
+        @media only screen and (max-width: 768px) {
+            .chat-overlay {
+                width: 100%;
+                height: 100%;
+                bottom: 0px;
+                right: 0px;
+                border-radius: 0;
+            }
+            .chat-overlay-open {
+                height: 100%;
+            }
+            #receiver {
+                height: calc(100% - 44px);
+                border-radius: 0;
+            }
+            .open-chat-button {
+                bottom: 24px;
+                right: 24px;
+            }
+        }
+    </style>
+</head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href='https://fonts.googleapis.com/css?family=Droid+Sans:400,700|Droid+Serif' rel='stylesheet'>
+<link href="https://fonts.googleapis.com/css?family=Open+Sans:400,700" rel="stylesheet">
+<body>
+    <div class="chat-overlay" id="chatOverlay">
+        <div class="chat-header">
+            <div class="chat-header-left">
+                <div class="chat-logo">RED</div>
+                <span class="chat-title">RED</span>
+            </div>
+            <div class="chat-header-right">
+                <button id="minimizeButton" class="chat-button minimize-button">-</button>
+				<button id="restartButton" class="chat-button restart-button">↻</button>
+                <button id="closeButton" class="chat-button close-button">x</button>
+            </div>
+        </div>
+        <iframe id="receiver" src="https://redfcu.dev.amelia.com/Amelia/ui/redstone_external/chat?domain=redfcuagetics" frameborder="0" allow="geolocation; microphone; camera">
+            <p>Your browser does not support iframes.</p>
+            
+        </iframe>
+    </div>
+    
+    <div class="open-chat-button" id="openChatButton">
+        <div class="chat-logo">RED</div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', (event) => {
+            const chatOverlay = document.getElementById('chatOverlay');
+            const openChatButton = document.getElementById('openChatButton');
+            const minimizeButton = document.getElementById('minimizeButton');
+			const restartButton = document.getElementById('restartButton');
+            const closeButton = document.getElementById('closeButton');
+            const receiver = document.getElementById('receiver');
+			
+
+
+
+//Function To Send Attributes to Amelia From Parent Frame
+ function sendConversationAttribute(key, value) {
+	let data = {};
+	data["actionType"] = "ameliaConversationAttributes";
+	let entry = {};
+	entry[key] = value;
+	data["actionData"] = entry;
+	console.log("Send data: " + JSON.stringify(data));
+	sendMessage(data);
+    console.log("Data Sent: ");
+
+	}
+
+	var isAppStarted = false;
+	     window.addEventListener("message", (res) => {
+		console.log("Inside listner " + res);
+		if (
+		  res?.data?.notificationType === "conversationNew" ||
+		  res?.data?.notificationType === "conversationJoined"
+		) {
+		  console.log("Inside if ");
+		  isAppStarted = true;
+          // Attributes to Send to Amelia from HomePage. 
+          sendConversationAttribute("Logged In User","True") 
+          sendConversationAttribute("Member Number","78787879")  
+          sendConversationAttribute("Name","John Doe") 
+          sendConversationAttribute("DOB","09/09/1997") 
+          sendConversationAttribute("email","john.doe@redfcu.org") 
+		}
+	     });
+
+	 function sendMessage(jsonData) {
+            var ameliaBaseURL = "https://redfcu.dev.amelia.com/"  //define Amelia Base URL
+	        console.log("Inside send message new ");
+	        if (isAppStarted) {
+	          const iframe = document.getElementById("receiver");
+	          console.log("Inside if send message ");
+	          iframe?.contentWindow?.postMessage(
+	            jsonData,
+	            ameliaBaseURL 
+	          );
+	        }
+	      }
+
+
+            function openChat() {
+                chatOverlay.style.display = 'block'; // Ensure the overlay is visible
+                chatOverlay.classList.remove('chat-overlay-closed');
+                chatOverlay.classList.add('chat-overlay-open');
+                receiver.classList.remove('minimized');
+                openChatButton.style.display = 'none';
+                localStorage.setItem('chatState', 'open');
+            }
+
+            function minimizeChat() {
+                chatOverlay.classList.remove('chat-overlay-open');
+                chatOverlay.classList.add('chat-overlay-closed');
+                receiver.classList.add('minimized');
+                openChatButton.style.display = 'block';
+                localStorage.setItem('chatState', 'minimized');
+            }
+            
+            function closeChat() {
+                chatOverlay.style.display = 'none';
+                openChatButton.style.display = 'block';
+                localStorage.setItem('chatState', 'closed');
+            }
+
+            openChatButton.addEventListener('click', openChat);
+            minimizeButton.addEventListener('click', minimizeChat);
+		    restartButton.addEventListener('click', resetConversation);
+            closeButton.addEventListener('click', closeConversation);
+
+            const savedState = localStorage.getItem('chatState');
+            if (savedState === 'open') {
+                openChat();
+            } else if (savedState === 'minimized') {
+                minimizeChat();
+            } else {
+                closeChat();
+            }
+        });
+
+function closeConversation() {
+            console.log("close conversation");
+            sendMessagetoInstance({actionType: 'endConversation'});
+        }
+        function resetConversation() {
+            sendMessagetoInstance({actionType: 'resetConversation'});
+        }
+function sendMessagetoInstance(data) {
+            /**
+             * Use data object and postMessage to URL provided (postMessage to child frame)
+             * @param {Object} data - data to be sent to url provided of child frame
+             * @returns - no return
+             */
+            var receiverElem = document.getElementById('receiver').contentWindow;
+            console.log("Send data: " + JSON.stringify(data));
+            receiverElem.postMessage(data, "https://redfcu.dev.amelia.com/Amelia/ui/redstone_external/chat?domain=redfcuagetics");
+        }
+		
+    </script>
+</body>
+</html>
