@@ -199,6 +199,7 @@
 
     // ---------------------------------------------------------
     // Poll until app is started, then send attributes
+    // Matches client's waitUntilStarted() pattern
     // ---------------------------------------------------------
     async function waitUntilStarted() {
         while (!isAppStarted) {
@@ -228,22 +229,24 @@
     }
 
     // ---------------------------------------------------------
-    // Message listener — sets isAppStarted flag
+    // Message listener — sends attributes again as backup
     // ---------------------------------------------------------
     window.addEventListener("message", (res) => {
         console.log("window.addEventListener");
-        if (res && res.data && res.data.notificationType) {
-            console.log(res.data.notificationType);
-            if (res.data.notificationType === "conversationNew" ||
-                res.data.notificationType === "conversationJoined") {
-                console.log("Conversation started - setting isAppStarted");
-                isAppStarted = true;
+        if (isAppStarted) {
+            if (res && res.data && res.data.notificationType) {
+                console.log(res.data.notificationType);
+                if (res.data.notificationType === "conversationNew" ||
+                    res.data.notificationType === "conversationJoined") {
+                    console.log("Conversation started - sending attributes as backup");
+                    sendConversationAttributes();
 
-                // Fire any queued action
-                if (pendingAction) {
-                    console.log("Firing queued action: " + JSON.stringify(pendingAction));
-                    sendMessagetoInstance(pendingAction);
-                    pendingAction = null;
+                    // Fire any queued action
+                    if (pendingAction) {
+                        console.log("Firing queued action: " + JSON.stringify(pendingAction));
+                        sendMessagetoInstance(pendingAction);
+                        pendingAction = null;
+                    }
                 }
             }
         }
@@ -343,7 +346,14 @@
             closeChat();
         }
 
-        // Start polling — will send attributes once app is ready
+        // KEY CHANGE: Set isAppStarted here — BEFORE conversation starts
+        // This matches the client's pattern where _isAppStarted is set
+        // at the end of DOMContentLoaded
+        isAppStarted = true;
+
+        // Start polling — will send attributes on the next 1s tick
+        // The 1s delay gives the iframe time to load the Amelia SDK
+        // and set up its message listener
         waitUntilStarted();
     });
 </script>
