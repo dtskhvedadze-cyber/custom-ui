@@ -183,37 +183,43 @@
     </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', (event) => {
-        const chatOverlay = document.getElementById('chatOverlay');
-        const openChatButton = document.getElementById('openChatButton');
-        const minimizeButton = document.getElementById('minimizeButton');
-        const restartButton = document.getElementById('restartButton');
-        const closeButton = document.getElementById('closeButton');
-        const receiver = document.getElementById('receiver');
+    var isAppStarted = false;
+    var pendingAction = null;
+    var ameliaBaseURL = "https://redfcu.dev.amelia.com/";
+    var ameliaDomainURL = "https://redfcu.dev.amelia.com/Amelia/ui/redstone_external/chat?domain=redfcu";
 
-        var ameliaBaseURL = "https://redfcu.dev.amelia.com/";
-        var isAppStarted = false;
-        var pendingAction = null;
+    const attributes = {
+        "Logged In User": "True",
+        "Member Number": "78787879",
+        "Name": "John Doe",
+        "DOB": "09/09/1997",
+        "Email": "john.doe@redfcu.org"
+    };
 
-        // Function To Send Attributes to Amelia From Parent Frame
-        function sendConversationAttribute(key, value) {
-            let data = {};
-            data["actionType"] = "ameliaConversationAttributes";
-            let entry = {};
-            entry[key] = value;
-            data["actionData"] = entry;
-            console.log("Send data: " + JSON.stringify(data));
-            sendMessage(data);
-            console.log("Data Sent: ");
+    // ---------------------------------------------------------
+    // Wait until app is started
+    // ---------------------------------------------------------
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    async function waitUntilStarted() {
+        while (!isAppStarted) {
+            console.log("Still waiting...");
+            await sleep(500);
         }
+        console.log("Condition met!");
+    }
 
-        window.addEventListener("message", (res) => {
-            console.log("Inside listner " + res);
+    // ---------------------------------------------------------
+    // Message listener
+    // ---------------------------------------------------------
+    window.addEventListener("message", (res) => {
+        console.log("Inside listener " + res);
+        if (res && res.data && res.data.notificationType) {
             if (
-                res?.data?.notificationType === "conversationNew" ||
-                res?.data?.notificationType === "conversationJoined"
+                res.data.notificationType === "conversationNew" ||
+                res.data.notificationType === "conversationJoined"
             ) {
-                console.log("Inside if ");
+                console.log("Conversation started");
                 isAppStarted = true;
 
                 // Fire any queued action
@@ -223,46 +229,85 @@
                     pendingAction = null;
                 }
 
-                // Attributes to Send to Amelia from HomePage
-                sendConversationAttribute("Logged In User", "True");
-                sendConversationAttribute("Member Number", "78787879");
-                sendConversationAttribute("Name", "John Doe");
-                sendConversationAttribute("DOB", "09/09/1997");
-                sendConversationAttribute("email", "john.doe@redfcu.org");
+                // Send all attributes at once
+                sendConversationAttributes();
+            }
+        }
+    });
+
+    // ---------------------------------------------------------
+    // Send all attributes in a single message
+    // ---------------------------------------------------------
+    function sendConversationAttributes() {
+        console.log("sendConversationAttributes");
+        sendMessage({
+            actionType: "ameliaConversationAttributes",
+            actionData: {
+                "Logged In User": attributes["Logged In User"],
+                "Member Number": attributes["Member Number"],
+                "Name": attributes["Name"],
+                "DOB": attributes["DOB"],
+                "Email": attributes["Email"]
             }
         });
+        console.log("Attributes sent");
+    }
 
-        function sendMessage(jsonData) {
-            console.log("Inside send message new ");
-            if (isAppStarted) {
-                const iframe = document.getElementById("receiver");
-                console.log("Inside if send message ");
-                iframe?.contentWindow?.postMessage(jsonData, ameliaBaseURL);
-            }
+    // ---------------------------------------------------------
+    // Send message to Amelia (for attributes/general messages)
+    // ---------------------------------------------------------
+    function sendMessage(jsonData) {
+        console.log("sendMessage");
+        if (isAppStarted) {
+            const iframe = document.getElementById("receiver");
+            const contentWindow = iframe?.contentWindow;
+            contentWindow.postMessage(jsonData, ameliaBaseURL);
+            console.log("Message Sent: " + JSON.stringify(jsonData));
         }
+    }
 
-        function sendMessagetoInstance(data) {
-            console.log("Send data: " + JSON.stringify(data));
-            if (isAppStarted) {
-                const iframe = document.getElementById("receiver");
-                iframe?.contentWindow?.postMessage(data, ameliaBaseURL);
-            } else {
-                console.log("App not started yet, queuing action...");
-                pendingAction = data;
-            }
+    // ---------------------------------------------------------
+    // Send message to instance (for reset/close actions)
+    // ---------------------------------------------------------
+    function sendMessagetoInstance(data) {
+        console.log("Send data: " + JSON.stringify(data));
+        if (isAppStarted) {
+            const iframe = document.getElementById("receiver");
+            iframe?.contentWindow?.postMessage(data, ameliaBaseURL);
+        } else {
+            console.log("App not started yet, queuing action...");
+            pendingAction = data;
         }
+    }
 
-        function closeConversation() {
-            console.log("close conversation");
-            sendMessagetoInstance({ actionType: 'endConversation' });
-        }
+    // ---------------------------------------------------------
+    // Conversation actions
+    // ---------------------------------------------------------
+    function closeConversation() {
+        console.log("closeConversation");
+        sendMessagetoInstance({ actionType: 'endConversation' });
+    }
 
-        function resetConversation() {
-            console.log("reset conversation");
-            sendMessagetoInstance({ actionType: 'resetConversation' });
-        }
+    function resetConversation() {
+        console.log("resetConversation");
+        sendMessagetoInstance({ actionType: 'resetConversation' });
+    }
+
+    // ---------------------------------------------------------
+    // DOM Ready - UI controls
+    // ---------------------------------------------------------
+    document.addEventListener('DOMContentLoaded', (event) => {
+        console.log("In DOMContentLoaded");
+
+        const chatOverlay = document.getElementById('chatOverlay');
+        const openChatButton = document.getElementById('openChatButton');
+        const minimizeButton = document.getElementById('minimizeButton');
+        const restartButton = document.getElementById('restartButton');
+        const closeButton = document.getElementById('closeButton');
+        const receiver = document.getElementById('receiver');
 
         function openChat() {
+            console.log("openChat");
             chatOverlay.style.display = 'block';
             chatOverlay.classList.remove('chat-overlay-closed');
             chatOverlay.classList.add('chat-overlay-open');
@@ -272,6 +317,7 @@
         }
 
         function minimizeChat() {
+            console.log("minimizeChat");
             chatOverlay.classList.remove('chat-overlay-open');
             chatOverlay.classList.add('chat-overlay-closed');
             receiver.classList.add('minimized');
@@ -280,6 +326,7 @@
         }
 
         function closeChat() {
+            console.log("closeChat");
             chatOverlay.style.display = 'none';
             openChatButton.style.display = 'block';
             localStorage.setItem('chatState', 'closed');
@@ -298,6 +345,8 @@
         } else {
             closeChat();
         }
+
+        waitUntilStarted();
     });
 </script>
 </body>
