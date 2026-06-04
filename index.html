@@ -236,11 +236,40 @@
     }
 
     // ---------------------------------------------------------
+    // Best-effort early delivery: send attributes immediately, then a
+    // few rapid retries across the first ~300ms. This shrinks the window
+    // between "conversation started" and "engine has stored attributes",
+    // giving the greeting BPN's first script block the best chance of
+    // reading a populated map.
+    // NOTE: this is NOT a guarantee — on slow connections the first block
+    // can still run before any send lands. Keep a bounded safety check in
+    // the BPN (poll getCustomConversationAttributesAsMap() until non-empty).
+    // Resends are idempotent: the same attributes just overwrite themselves.
+    // ---------------------------------------------------------
+    function burstConversationAttributes() {
+        const delays = [0, 50, 100, 150, 200, 300];
+        delays.forEach((d) => {
+            if (d === 0) {
+                sendConversationAttributes();
+            } else {
+                setTimeout(sendConversationAttributes, d);
+            }
+        });
+    }
+
+    // ---------------------------------------------------------
     // Message listener — sets isAppStarted on conversation events
     // NO isAppStarted guard here — this is WHERE we set it
     // ---------------------------------------------------------
     window.addEventListener("message", (res) => {
-        console.log("window.addEventListener");
+        // DIAGNOSTIC: log every message coming from the Amelia iframe so we
+        // can see the full lifecycle — specifically what (if anything) fires
+        // BEFORE conversationNew, and in what order. This is how we find out
+        // whether there's an "initialize/ready" event we can hook to deliver
+        // attributes before the greeting BPN runs. Remove once identified.
+        if (res && res.origin === ameliaOrigin) {
+            console.log("[Amelia msg]", JSON.stringify(res.data));
+        }
         if (res && res.data && res.data.notificationType) {
             console.log(res.data.notificationType);
             if (res.data.notificationType === "conversationNew" ||
@@ -248,9 +277,10 @@
                 console.log("Conversation started - setting isAppStarted");
                 isAppStarted = true;
 
-                // Fast path: send attributes immediately on conversationNew.
-                // The waitUntilStarted() polling loop is the backup path.
-                sendConversationAttributes();
+                // Fast path: burst attributes immediately on conversationNew
+                // (send + rapid retries over ~300ms) to land them as early
+                // as possible. The waitUntilStarted() loop is the backup.
+                burstConversationAttributes();
 
                 // Fire any queued action
                 if (pendingAction) {
@@ -308,6 +338,33 @@
     // set isAppStarted, then send attributes
     // ---------------------------------------------------------
     waitUntilStarted();
+
+    // ---------------------------------------------------------
+    // EXPERIMENT (tests your hypothesis): try delivering attributes
+    // BEFORE conversationNew — at iframe-load / app-init time. If the
+    // Amelia app buffers attributes received before the conversation
+    // exists, these will already be in the engine when the greeting BPN's
+    // FIRST script block runs — closing the race with zero BPN wait.
+    // If the SDK discards pre-conversation attributes (the prior
+    // assumption), this is harmless: the conversationNew burst + polling
+    // loop still cover later blocks. Watch the BPN log (convAttributes)
+    // and the browser console to see which behavior is real.
+    // ---------------------------------------------------------
+    (function attemptEarlySend() {
+        const iframe = document.getElementById("receiver");
+        if (!iframe) return;
+        iframe.addEventListener("load", () => {
+            console.log("iframe load fired — attempting EARLY attribute send (pre-conversation)");
+            const earlyDelays = [0, 100, 250, 500, 1000];
+            earlyDelays.forEach((d) => {
+                if (d === 0) {
+                    sendConversationAttributes();
+                } else {
+                    setTimeout(sendConversationAttributes, d);
+                }
+            });
+        });
+    })();
 
     // ---------------------------------------------------------
     // DOM Ready - UI controls only (does NOT set isAppStarted)
