@@ -198,9 +198,7 @@
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     // ---------------------------------------------------------
-    // Poll until app is started, then send attributes
-    // MUST be called BEFORE DOMContentLoaded sets isAppStarted
-    // so the loop runs at least once (1s delay)
+    // Poll until conversation starts, then send attributes
     // ---------------------------------------------------------
     async function waitUntilStarted() {
         while (!isAppStarted) {
@@ -216,38 +214,42 @@
     // ---------------------------------------------------------
     function sendConversationAttributes() {
         console.log("sendConversationAttributes");
-        sendMessage({
-            actionType: "ameliaConversationAttributes",
-            actionData: {
-                "Logged In User": attributes["Logged In User"],
-                "Member Number": attributes["Member Number"],
-                "Name": attributes["Name"],
-                "DOB": attributes["DOB"],
-                "Email": attributes["Email"]
-            }
-        });
-        console.log("Attributes sent");
+        const iframe = document.getElementById("receiver");
+        const contentWindow = iframe?.contentWindow;
+        if (contentWindow) {
+            const data = {
+                actionType: "ameliaConversationAttributes",
+                actionData: {
+                    "Logged In User": attributes["Logged In User"],
+                    "Member Number": attributes["Member Number"],
+                    "Name": attributes["Name"],
+                    "DOB": attributes["DOB"],
+                    "Email": attributes["Email"]
+                }
+            };
+            contentWindow.postMessage(data, ameliaBaseURL);
+            console.log("Attributes sent: " + JSON.stringify(data));
+        }
     }
 
     // ---------------------------------------------------------
-    // Message listener — backup attribute send
+    // Message listener — sets isAppStarted on conversation events
+    // NO isAppStarted guard here — this is WHERE we set it
     // ---------------------------------------------------------
     window.addEventListener("message", (res) => {
         console.log("window.addEventListener");
-        if (isAppStarted) {
-            if (res && res.data && res.data.notificationType) {
-                console.log(res.data.notificationType);
-                if (res.data.notificationType === "conversationNew" ||
-                    res.data.notificationType === "conversationJoined") {
-                    console.log("Conversation started - sending attributes as backup");
-                    sendConversationAttributes();
+        if (res && res.data && res.data.notificationType) {
+            console.log(res.data.notificationType);
+            if (res.data.notificationType === "conversationNew" ||
+                res.data.notificationType === "conversationJoined") {
+                console.log("Conversation started - setting isAppStarted");
+                isAppStarted = true;
 
-                    // Fire any queued action
-                    if (pendingAction) {
-                        console.log("Firing queued action: " + JSON.stringify(pendingAction));
-                        sendMessagetoInstance(pendingAction);
-                        pendingAction = null;
-                    }
+                // Fire any queued action
+                if (pendingAction) {
+                    console.log("Firing queued action: " + JSON.stringify(pendingAction));
+                    sendMessagetoInstance(pendingAction);
+                    pendingAction = null;
                 }
             }
         }
@@ -295,16 +297,13 @@
     }
 
     // ---------------------------------------------------------
-    // PHASE 1: Start polling NOW — isAppStarted is false,
-    // so the loop WILL run at least one 1s cycle
-    // This mirrors the client calling waitUntilStarted()
-    // from InitializeAmeliaAI() before DOMContentLoaded
+    // Start polling NOW — will wait for conversationNew to
+    // set isAppStarted, then send attributes
     // ---------------------------------------------------------
     waitUntilStarted();
 
     // ---------------------------------------------------------
-    // PHASE 2: DOM Ready - set isAppStarted and setup UI
-    // The polling loop detects this on its next tick
+    // DOM Ready - UI controls only (does NOT set isAppStarted)
     // ---------------------------------------------------------
     document.addEventListener('DOMContentLoaded', (event) => {
         console.log("In DOMContentLoaded");
@@ -355,10 +354,6 @@
         } else {
             closeChat();
         }
-
-        // Signal that DOM is ready — polling loop will detect
-        // on its next 1s tick and send attributes
-        isAppStarted = true;
     });
 </script>
 </body>
