@@ -183,37 +183,62 @@
     </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', (event) => {
-        const chatOverlay = document.getElementById('chatOverlay');
-        const openChatButton = document.getElementById('openChatButton');
-        const minimizeButton = document.getElementById('minimizeButton');
-        const restartButton = document.getElementById('restartButton');
-        const closeButton = document.getElementById('closeButton');
-        const receiver = document.getElementById('receiver');
+    var isAppStarted = false;
+    var pendingAction = null;
+    var ameliaBaseURL = "https://redfcu.dev.amelia.com/";
+    var ameliaDomainPath = "/Amelia/ui/redstone_external/chat";
 
-        var ameliaBaseURL = "https://redfcu.dev.amelia.com/";
-        var isAppStarted = false;
-        var pendingAction = null;
+    const attributes = {
+        "Logged In User": "True",
+        "Member Number": "78787879",
+        "Name": "John Doe",
+        "DOB": "09/09/1997",
+        "Email": "john.doe@redfcu.org"
+    };
 
-        // Function To Send Attributes to Amelia From Parent Frame
-        function sendConversationAttribute(key, value) {
-            let data = {};
-            data["actionType"] = "ameliaConversationAttributes";
-            let entry = {};
-            entry[key] = value;
-            data["actionData"] = entry;
-            console.log("Send data: " + JSON.stringify(data));
-            sendMessage(data);
-            console.log("Data Sent: ");
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // ---------------------------------------------------------
+    // Build iframe URL with attributes as query parameters
+    // ---------------------------------------------------------
+    function buildIframeUrl() {
+        const url = new URL(ameliaDomainPath, ameliaBaseURL);
+        url.searchParams.set("domain", "redfcu");
+        url.searchParams.set("loggedInUser", attributes["Logged In User"]);
+        url.searchParams.set("memberNumber", attributes["Member Number"]);
+        url.searchParams.set("name", attributes["Name"]);
+        url.searchParams.set("dob", attributes["DOB"]);
+        url.searchParams.set("email", attributes["Email"]);
+        return url.toString();
+    }
+
+    // ---------------------------------------------------------
+    // Wait until app is started
+    // ---------------------------------------------------------
+    async function waitUntilStarted() {
+        while (!isAppStarted) {
+            console.log("Still waiting...");
+            await sleep(500);
         }
+        console.log("Condition met!");
+    }
 
-        window.addEventListener("message", (res) => {
-            console.log("Inside listner " + res);
-            if (
-                res?.data?.notificationType === "conversationNew" ||
-                res?.data?.notificationType === "conversationJoined"
-            ) {
-                console.log("Inside if ");
+    // ---------------------------------------------------------
+    // Message listener
+    // ---------------------------------------------------------
+    window.addEventListener("message", (res) => {
+        console.log("Inside listener " + res);
+        if (res && res.data && res.data.notificationType) {
+
+            // conversationNew - send attributes via postMessage as backup
+            if (res.data.notificationType === "conversationNew") {
+                console.log("conversationNew - sending attributes as backup");
+                sendAttributesEarly();
+            }
+
+            // conversationJoined - app is fully ready
+            if (res.data.notificationType === "conversationJoined") {
+                console.log("conversationJoined - app is ready");
                 isAppStarted = true;
 
                 // Fire any queued action
@@ -222,47 +247,92 @@
                     sendMessagetoInstance(pendingAction);
                     pendingAction = null;
                 }
-
-                // Attributes to Send to Amelia from HomePage
-                sendConversationAttribute("Logged In User", "True");
-                sendConversationAttribute("Member Number", "78787879");
-                sendConversationAttribute("Name", "John Doe");
-                sendConversationAttribute("DOB", "09/09/1997");
-                sendConversationAttribute("email", "john.doe@redfcu.org");
-            }
-        });
-
-        function sendMessage(jsonData) {
-            console.log("Inside send message new ");
-            if (isAppStarted) {
-                const iframe = document.getElementById("receiver");
-                console.log("Inside if send message ");
-                iframe?.contentWindow?.postMessage(jsonData, ameliaBaseURL);
             }
         }
+    });
 
-        function sendMessagetoInstance(data) {
-            console.log("Send data: " + JSON.stringify(data));
-            if (isAppStarted) {
-                const iframe = document.getElementById("receiver");
-                iframe?.contentWindow?.postMessage(data, ameliaBaseURL);
-            } else {
-                console.log("App not started yet, queuing action...");
-                pendingAction = data;
-            }
+    // ---------------------------------------------------------
+    // Send attributes early as backup (via postMessage)
+    // ---------------------------------------------------------
+    function sendAttributesEarly() {
+        console.log("sendAttributesEarly");
+        const iframe = document.getElementById("receiver");
+        const contentWindow = iframe?.contentWindow;
+        if (contentWindow) {
+            const data = {
+                actionType: "ameliaConversationAttributes",
+                actionData: {
+                    "Logged In User": attributes["Logged In User"],
+                    "Member Number": attributes["Member Number"],
+                    "Name": attributes["Name"],
+                    "DOB": attributes["DOB"],
+                    "Email": attributes["Email"]
+                }
+            };
+            contentWindow.postMessage(data, ameliaBaseURL);
+            console.log("Attributes sent early: " + JSON.stringify(data));
         }
+    }
 
-        function closeConversation() {
-            console.log("close conversation");
-            sendMessagetoInstance({ actionType: 'endConversation' });
+    // ---------------------------------------------------------
+    // Send message to Amelia (general messages, guarded)
+    // ---------------------------------------------------------
+    function sendMessage(jsonData) {
+        console.log("sendMessage");
+        if (isAppStarted) {
+            const iframe = document.getElementById("receiver");
+            const contentWindow = iframe?.contentWindow;
+            contentWindow.postMessage(jsonData, ameliaBaseURL);
+            console.log("Message Sent: " + JSON.stringify(jsonData));
         }
+    }
 
-        function resetConversation() {
-            console.log("reset conversation");
-            sendMessagetoInstance({ actionType: 'resetConversation' });
+    // ---------------------------------------------------------
+    // Send message to instance (reset/close actions, with queuing)
+    // ---------------------------------------------------------
+    function sendMessagetoInstance(data) {
+        console.log("Send data: " + JSON.stringify(data));
+        if (isAppStarted) {
+            const iframe = document.getElementById("receiver");
+            iframe?.contentWindow?.postMessage(data, ameliaBaseURL);
+        } else {
+            console.log("App not started yet, queuing action...");
+            pendingAction = data;
         }
+    }
+
+    // ---------------------------------------------------------
+    // Conversation actions
+    // ---------------------------------------------------------
+    function closeConversation() {
+        console.log("closeConversation");
+        sendMessagetoInstance({ actionType: 'endConversation' });
+    }
+
+    function resetConversation() {
+        console.log("resetConversation");
+        sendMessagetoInstance({ actionType: 'resetConversation' });
+    }
+
+    // ---------------------------------------------------------
+    // DOM Ready - UI controls
+    // ---------------------------------------------------------
+    document.addEventListener('DOMContentLoaded', (event) => {
+        console.log("In DOMContentLoaded");
+
+        const chatOverlay = document.getElementById('chatOverlay');
+        const openChatButton = document.getElementById('openChatButton');
+        const minimizeButton = document.getElementById('minimizeButton');
+        const restartButton = document.getElementById('restartButton');
+        const closeButton = document.getElementById('closeButton');
+        const receiver = document.getElementById('receiver');
+
+        // Set iframe src with attributes baked into the URL
+        receiver.src = buildIframeUrl();
+        console.log("Iframe URL set: " + receiver.src);
 
         function openChat() {
+            console.log("openChat");
             chatOverlay.style.display = 'block';
             chatOverlay.classList.remove('chat-overlay-closed');
             chatOverlay.classList.add('chat-overlay-open');
@@ -272,6 +342,7 @@
         }
 
         function minimizeChat() {
+            console.log("minimizeChat");
             chatOverlay.classList.remove('chat-overlay-open');
             chatOverlay.classList.add('chat-overlay-closed');
             receiver.classList.add('minimized');
@@ -280,6 +351,7 @@
         }
 
         function closeChat() {
+            console.log("closeChat");
             chatOverlay.style.display = 'none';
             openChatButton.style.display = 'block';
             localStorage.setItem('chatState', 'closed');
@@ -298,6 +370,8 @@
         } else {
             closeChat();
         }
+
+        waitUntilStarted();
     });
 </script>
 </body>
