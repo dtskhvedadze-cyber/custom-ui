@@ -245,6 +245,10 @@
                 console.log("Conversation started - setting isAppStarted");
                 isAppStarted = true;
 
+                // Fast path: send attributes immediately on conversationNew.
+                // The waitUntilStarted() polling loop is the backup path.
+                sendConversationAttributes();
+
                 // Fire any queued action
                 if (pendingAction) {
                     console.log("Firing queued action: " + JSON.stringify(pendingAction));
