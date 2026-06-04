@@ -182,119 +182,123 @@
         <div class="chat-logo">RED</div>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', (event) => {
-            const chatOverlay = document.getElementById('chatOverlay');
-            const openChatButton = document.getElementById('openChatButton');
-            const minimizeButton = document.getElementById('minimizeButton');
-			const restartButton = document.getElementById('restartButton');
-            const closeButton = document.getElementById('closeButton');
-            const receiver = document.getElementById('receiver');
-			
+<script>
+    document.addEventListener('DOMContentLoaded', (event) => {
+        const chatOverlay = document.getElementById('chatOverlay');
+        const openChatButton = document.getElementById('openChatButton');
+        const minimizeButton = document.getElementById('minimizeButton');
+        const restartButton = document.getElementById('restartButton');
+        const closeButton = document.getElementById('closeButton');
+        const receiver = document.getElementById('receiver');
 
+        var ameliaBaseURL = "https://redfcu.dev.amelia.com/";
+        var isAppStarted = false;
+        var pendingAction = null;
 
+        // Function To Send Attributes to Amelia From Parent Frame
+        function sendConversationAttribute(key, value) {
+            let data = {};
+            data["actionType"] = "ameliaConversationAttributes";
+            let entry = {};
+            entry[key] = value;
+            data["actionData"] = entry;
+            console.log("Send data: " + JSON.stringify(data));
+            sendMessage(data);
+            console.log("Data Sent: ");
+        }
 
-//Function To Send Attributes to Amelia From Parent Frame
- function sendConversationAttribute(key, value) {
-	let data = {};
-	data["actionType"] = "ameliaConversationAttributes";
-	let entry = {};
-	entry[key] = value;
-	data["actionData"] = entry;
-	console.log("Send data: " + JSON.stringify(data));
-	sendMessage(data);
-    console.log("Data Sent: ");
+        window.addEventListener("message", (res) => {
+            console.log("Inside listner " + res);
+            if (
+                res?.data?.notificationType === "conversationNew" ||
+                res?.data?.notificationType === "conversationJoined"
+            ) {
+                console.log("Inside if ");
+                isAppStarted = true;
 
-	}
+                // Fire any queued action
+                if (pendingAction) {
+                    console.log("Firing queued action: " + JSON.stringify(pendingAction));
+                    sendMessagetoInstance(pendingAction);
+                    pendingAction = null;
+                }
 
-	var isAppStarted = false;
-	     window.addEventListener("message", (res) => {
-		console.log("Inside listner " + res);
-		if (
-		  res?.data?.notificationType === "conversationNew" ||
-		  res?.data?.notificationType === "conversationJoined"
-		) {
-		  console.log("Inside if ");
-		  isAppStarted = true;
-          // Attributes to Send to Amelia from HomePage. 
-          sendConversationAttribute("Logged In User","True") 
-          sendConversationAttribute("Member Number","78787879")  
-          sendConversationAttribute("Name","John Doe") 
-          sendConversationAttribute("DOB","09/09/1997") 
-          sendConversationAttribute("email","john.doe@redfcu.org") 
-		}
-	     });
-
-	 function sendMessage(jsonData) {
-            var ameliaBaseURL = "https://redfcu.dev.amelia.com/"  //define Amelia Base URL
-	        console.log("Inside send message new ");
-	        if (isAppStarted) {
-	          const iframe = document.getElementById("receiver");
-	          console.log("Inside if send message ");
-	          iframe?.contentWindow?.postMessage(
-	            jsonData,
-	            ameliaBaseURL 
-	          );
-	        }
-	      }
-
-
-            function openChat() {
-                chatOverlay.style.display = 'block'; // Ensure the overlay is visible
-                chatOverlay.classList.remove('chat-overlay-closed');
-                chatOverlay.classList.add('chat-overlay-open');
-                receiver.classList.remove('minimized');
-                openChatButton.style.display = 'none';
-                localStorage.setItem('chatState', 'open');
-            }
-
-            function minimizeChat() {
-                chatOverlay.classList.remove('chat-overlay-open');
-                chatOverlay.classList.add('chat-overlay-closed');
-                receiver.classList.add('minimized');
-                openChatButton.style.display = 'block';
-                localStorage.setItem('chatState', 'minimized');
-            }
-            
-            function closeChat() {
-                chatOverlay.style.display = 'none';
-                openChatButton.style.display = 'block';
-                localStorage.setItem('chatState', 'closed');
-            }
-
-            openChatButton.addEventListener('click', openChat);
-            minimizeButton.addEventListener('click', minimizeChat);
-		    restartButton.addEventListener('click', resetConversation);
-            closeButton.addEventListener('click', closeConversation);
-
-            const savedState = localStorage.getItem('chatState');
-            if (savedState === 'open') {
-                openChat();
-            } else if (savedState === 'minimized') {
-                minimizeChat();
-            } else {
-                closeChat();
+                // Attributes to Send to Amelia from HomePage
+                sendConversationAttribute("Logged In User", "True");
+                sendConversationAttribute("Member Number", "78787879");
+                sendConversationAttribute("Name", "John Doe");
+                sendConversationAttribute("DOB", "09/09/1997");
+                sendConversationAttribute("email", "john.doe@redfcu.org");
             }
         });
 
-function closeConversation() {
-            console.log("close conversation");
-            sendMessagetoInstance({actionType: 'endConversation'});
+        function sendMessage(jsonData) {
+            console.log("Inside send message new ");
+            if (isAppStarted) {
+                const iframe = document.getElementById("receiver");
+                console.log("Inside if send message ");
+                iframe?.contentWindow?.postMessage(jsonData, ameliaBaseURL);
+            }
         }
-        function resetConversation() {
-            sendMessagetoInstance({actionType: 'resetConversation'});
-        }
-function sendMessagetoInstance(data) {
-            /**
-             * Use data object and postMessage to URL provided (postMessage to child frame)
-             * @param {Object} data - data to be sent to url provided of child frame
-             * @returns - no return
-             */
-            var receiverElem = document.getElementById('receiver').contentWindow;
+
+        function sendMessagetoInstance(data) {
             console.log("Send data: " + JSON.stringify(data));
-            receiverElem.postMessage(data, "https://redfcu.dev.amelia.com/Amelia/ui/redstone_external/chat?domain=redfcu");
+            if (isAppStarted) {
+                const iframe = document.getElementById("receiver");
+                iframe?.contentWindow?.postMessage(data, ameliaBaseURL);
+            } else {
+                console.log("App not started yet, queuing action...");
+                pendingAction = data;
+            }
         }
-		
-    </script>
+
+        function closeConversation() {
+            console.log("close conversation");
+            sendMessagetoInstance({ actionType: 'endConversation' });
+        }
+
+        function resetConversation() {
+            console.log("reset conversation");
+            sendMessagetoInstance({ actionType: 'resetConversation' });
+        }
+
+        function openChat() {
+            chatOverlay.style.display = 'block';
+            chatOverlay.classList.remove('chat-overlay-closed');
+            chatOverlay.classList.add('chat-overlay-open');
+            receiver.classList.remove('minimized');
+            openChatButton.style.display = 'none';
+            localStorage.setItem('chatState', 'open');
+        }
+
+        function minimizeChat() {
+            chatOverlay.classList.remove('chat-overlay-open');
+            chatOverlay.classList.add('chat-overlay-closed');
+            receiver.classList.add('minimized');
+            openChatButton.style.display = 'block';
+            localStorage.setItem('chatState', 'minimized');
+        }
+
+        function closeChat() {
+            chatOverlay.style.display = 'none';
+            openChatButton.style.display = 'block';
+            localStorage.setItem('chatState', 'closed');
+        }
+
+        openChatButton.addEventListener('click', openChat);
+        minimizeButton.addEventListener('click', minimizeChat);
+        restartButton.addEventListener('click', resetConversation);
+        closeButton.addEventListener('click', closeConversation);
+
+        const savedState = localStorage.getItem('chatState');
+        if (savedState === 'open') {
+            openChat();
+        } else if (savedState === 'minimized') {
+            minimizeChat();
+        } else {
+            closeChat();
+        }
+    });
+</script>
 </body>
 </html>
