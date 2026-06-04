@@ -337,34 +337,15 @@
     // Start polling NOW — will wait for conversationNew to
     // set isAppStarted, then send attributes
     // ---------------------------------------------------------
+    // NOTE: attributes CANNOT be sent before conversationNew — the engine
+    // rejects them with {"actionType":"errorMessage","actionData":
+    // {"message":"A conversation has not started"}} (confirmed via the
+    // lifecycle log). conversationNew is the first valid moment, so the
+    // burst (fast path) + waitUntilStarted (backup) are the earliest the
+    // client can deliver. Reaching the greeting's FIRST script block with
+    // zero delay is not possible from HTML — see AM5-17314; use a bounded
+    // poll in the BPN's first script block as the safety net.
     waitUntilStarted();
-
-    // ---------------------------------------------------------
-    // EXPERIMENT (tests your hypothesis): try delivering attributes
-    // BEFORE conversationNew — at iframe-load / app-init time. If the
-    // Amelia app buffers attributes received before the conversation
-    // exists, these will already be in the engine when the greeting BPN's
-    // FIRST script block runs — closing the race with zero BPN wait.
-    // If the SDK discards pre-conversation attributes (the prior
-    // assumption), this is harmless: the conversationNew burst + polling
-    // loop still cover later blocks. Watch the BPN log (convAttributes)
-    // and the browser console to see which behavior is real.
-    // ---------------------------------------------------------
-    (function attemptEarlySend() {
-        const iframe = document.getElementById("receiver");
-        if (!iframe) return;
-        iframe.addEventListener("load", () => {
-            console.log("iframe load fired — attempting EARLY attribute send (pre-conversation)");
-            const earlyDelays = [0, 100, 250, 500, 1000];
-            earlyDelays.forEach((d) => {
-                if (d === 0) {
-                    sendConversationAttributes();
-                } else {
-                    setTimeout(sendConversationAttributes, d);
-                }
-            });
-        });
-    })();
 
     // ---------------------------------------------------------
     // DOM Ready - UI controls only (does NOT set isAppStarted)
