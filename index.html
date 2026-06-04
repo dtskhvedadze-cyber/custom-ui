@@ -184,7 +184,6 @@
 
 <script>
     var isAppStarted = false;
-    var initializationComplete = false;
     var pendingAction = null;
     var ameliaBaseURL = "https://redfcu.dev.amelia.com/";
 
@@ -199,37 +198,16 @@
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     // ---------------------------------------------------------
-    // Initialization — wait until complete before processing messages
+    // Poll until app is started, then send attributes
     // ---------------------------------------------------------
-    async function initialize() {
-        console.log("Initializing...");
-
-        // Simulate any setup needed (URL config, attribute loading, etc.)
-        // In production this would come from a view model
-        initializationComplete = true;
-
-        while (!initializationComplete) {
+    async function waitUntilStarted() {
+        while (!isAppStarted) {
             console.log("Still waiting...");
             await sleep(1000);
         }
-        console.log("Initialization complete");
+        console.log("Condition met!");
+        sendConversationAttributes();
     }
-
-    // ---------------------------------------------------------
-    // Message listener — only processes after initialization
-    // ---------------------------------------------------------
-    window.addEventListener("message", (res) => {
-        console.log("window.addEventListener");
-        if (isAppStarted) {
-            if (res && res.data && res.data.notificationType) {
-                console.log(res.data.notificationType);
-                if (res.data.notificationType === "conversationNew" ||
-                    res.data.notificationType === "conversationJoined") {
-                    sendConversationAttributes();
-                }
-            }
-        }
-    });
 
     // ---------------------------------------------------------
     // Send all attributes in a single message
@@ -248,6 +226,28 @@
         });
         console.log("Attributes sent");
     }
+
+    // ---------------------------------------------------------
+    // Message listener — sets isAppStarted flag
+    // ---------------------------------------------------------
+    window.addEventListener("message", (res) => {
+        console.log("window.addEventListener");
+        if (res && res.data && res.data.notificationType) {
+            console.log(res.data.notificationType);
+            if (res.data.notificationType === "conversationNew" ||
+                res.data.notificationType === "conversationJoined") {
+                console.log("Conversation started - setting isAppStarted");
+                isAppStarted = true;
+
+                // Fire any queued action
+                if (pendingAction) {
+                    console.log("Firing queued action: " + JSON.stringify(pendingAction));
+                    sendMessagetoInstance(pendingAction);
+                    pendingAction = null;
+                }
+            }
+        }
+    });
 
     // ---------------------------------------------------------
     // Send message (for attributes/general messages)
@@ -334,16 +334,6 @@
         restartButton.addEventListener('click', resetConversation);
         closeButton.addEventListener('click', closeConversation);
 
-        // Mark app as started — initialization is done, DOM is ready
-        isAppStarted = true;
-
-        // Fire any queued action
-        if (pendingAction) {
-            console.log("Firing queued action: " + JSON.stringify(pendingAction));
-            sendMessagetoInstance(pendingAction);
-            pendingAction = null;
-        }
-
         const savedState = localStorage.getItem('chatState');
         if (savedState === 'open') {
             openChat();
@@ -353,7 +343,8 @@
             closeChat();
         }
 
-        initialize();
+        // Start polling — will send attributes once app is ready
+        waitUntilStarted();
     });
 </script>
 </body>
