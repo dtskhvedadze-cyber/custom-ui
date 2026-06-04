@@ -199,7 +199,8 @@
 
     // ---------------------------------------------------------
     // Poll until app is started, then send attributes
-    // Matches client's waitUntilStarted() pattern
+    // MUST be called BEFORE DOMContentLoaded sets isAppStarted
+    // so the loop runs at least once (1s delay)
     // ---------------------------------------------------------
     async function waitUntilStarted() {
         while (!isAppStarted) {
@@ -229,7 +230,7 @@
     }
 
     // ---------------------------------------------------------
-    // Message listener — sends attributes again as backup
+    // Message listener — backup attribute send
     // ---------------------------------------------------------
     window.addEventListener("message", (res) => {
         console.log("window.addEventListener");
@@ -294,7 +295,16 @@
     }
 
     // ---------------------------------------------------------
-    // DOM Ready - UI controls
+    // PHASE 1: Start polling NOW — isAppStarted is false,
+    // so the loop WILL run at least one 1s cycle
+    // This mirrors the client calling waitUntilStarted()
+    // from InitializeAmeliaAI() before DOMContentLoaded
+    // ---------------------------------------------------------
+    waitUntilStarted();
+
+    // ---------------------------------------------------------
+    // PHASE 2: DOM Ready - set isAppStarted and setup UI
+    // The polling loop detects this on its next tick
     // ---------------------------------------------------------
     document.addEventListener('DOMContentLoaded', (event) => {
         console.log("In DOMContentLoaded");
@@ -346,15 +356,9 @@
             closeChat();
         }
 
-        // KEY CHANGE: Set isAppStarted here — BEFORE conversation starts
-        // This matches the client's pattern where _isAppStarted is set
-        // at the end of DOMContentLoaded
+        // Signal that DOM is ready — polling loop will detect
+        // on its next 1s tick and send attributes
         isAppStarted = true;
-
-        // Start polling — will send attributes on the next 1s tick
-        // The 1s delay gives the iframe time to load the Amelia SDK
-        // and set up its message listener
-        waitUntilStarted();
     });
 </script>
 </body>
