@@ -186,6 +186,9 @@
     var isAppStarted = false;
     var pendingAction = null;
     var ameliaBaseURL = "https://redfcu.dev.amelia.com/";
+    // postMessage targetOrigin only compares scheme+host+port; resolve it
+    // explicitly so a stray path/trailing slash can never affect the check.
+    var ameliaOrigin = new URL(ameliaBaseURL).origin;
 
     const attributes = {
         "Logged In User": "True",
@@ -227,7 +230,7 @@
                     "Email": attributes["Email"]
                 }
             };
-            contentWindow.postMessage(data, ameliaBaseURL);
+            contentWindow.postMessage(data, ameliaOrigin);
             console.log("Attributes sent: " + JSON.stringify(data));
         }
     }
@@ -267,7 +270,7 @@
         if (isAppStarted) {
             const iframe = document.getElementById("receiver");
             const contentWindow = iframe?.contentWindow;
-            contentWindow.postMessage(jsonData, ameliaBaseURL);
+            contentWindow.postMessage(jsonData, ameliaOrigin);
             console.log("Message Sent: " + JSON.stringify(jsonData));
         }
     }
@@ -280,7 +283,7 @@
         if (isAppStarted) {
             const iframe = document.getElementById("receiver");
             const contentWindow = iframe?.contentWindow;
-            contentWindow.postMessage(data, ameliaBaseURL);
+            contentWindow.postMessage(data, ameliaOrigin);
         } else {
             console.log("App not started yet, queuing action...");
             pendingAction = data;
